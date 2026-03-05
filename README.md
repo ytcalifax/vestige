@@ -15,7 +15,7 @@ Vestige gives you a clean, dependency-light Python interface to the official [Д
 ## 📥 Installation
 
 ```bash
-pip install vestige
+pip install vestige-scraper
 ```
 
 Or, to install directly from source:
