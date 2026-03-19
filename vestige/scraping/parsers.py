@@ -3,23 +3,22 @@ from __future__ import annotations
 import re
 from typing import List
 
-from bs4 import BeautifulSoup, Tag
+from selectolax.parser import HTMLParser, Node
 
 from ..core import constants as C
 from ..models.models import DownloadFile, IssueEntry
 
 
-def _extract_view_state(soup: BeautifulSoup) -> str:
+def _extract_view_state(tree: HTMLParser) -> str:
     """Pull the javax.faces.ViewState hidden input value from a page.
 
     Returns an empty string when the element is absent so callers never
     receive ``None``.
     """
-    tag = soup.find("input", attrs={"name": C.VIEW_STATE_NAME})
-    if tag and isinstance(tag, Tag):
-        value = tag.get("value", "")
-        return value if isinstance(value, str) else ""
-    return ""
+    node = tree.css_first(f'input[name="{C.VIEW_STATE_NAME}"]')
+    if node is None:
+        return ""
+    return node.attributes.get("value", "") or ""
 
 
 class IssueParser:
@@ -28,86 +27,72 @@ class IssueParser:
     All public methods satisfy the ``PageParser`` protocol.
     """
 
-    def parse_entries(self, soup: BeautifulSoup) -> List[IssueEntry]:
+    def parse_entries(self, tree: HTMLParser) -> List[IssueEntry]:
         """Parse all issue entries from a listing page."""
         entries: List[IssueEntry] = []
-
-        data_table = soup.find("table", id=C.TABLE_ID)
-        if not data_table:
+        data_table = tree.css_first(f'table[id="{C.TABLE_ID}"]')
+        if data_table is None:
             return entries
-
-        tbody = data_table.find("tbody", id=C.TBODY_ID)
-        if not tbody:
+        tbody = data_table.css_first(f'tbody[id="{C.TBODY_ID}"]')
+        if tbody is None:
             return entries
-
-        for row in tbody.find_all("tr", recursive=False):
+        for row in tbody.css("tr"):
             entry = self._parse_row(row)
             if entry is not None:
                 entries.append(entry)
-
         return entries
 
-    def parse_download_files(self, soup: BeautifulSoup) -> List[DownloadFile]:
+    def parse_download_files(self, tree: HTMLParser) -> List[DownloadFile]:
         """Parse download file links from the download modal panel."""
         files: List[DownloadFile] = []
-
-        tbody = soup.find(
-            "tbody",
-            id=re.compile(C.DOWNLOAD_TBODY_PATTERN),
+        tbody = tree.css_first(
+            'tbody[id^="broi_form:_idJsp"][id$=":tbody_element"]'
         )
-        if not tbody:
+        if tbody is None:
             return files
-
-        for a_tag in tbody.find_all("a", href=re.compile(C.DOWNLOAD_HREF_PATTERN)):
-            url = self._normalise_url(a_tag["href"])
-            filename = a_tag.get_text(strip=True)
+        for a_tag in tbody.css('a[href*="fileUploadShowing"]'):
+            href = a_tag.attributes.get("href", "") or ""
+            url = self._normalise_url(href)
+            filename = a_tag.text(strip=True)
             files.append(DownloadFile(url=url, filename=filename))
-
         return files
 
-    def parse_total_results(self, soup: BeautifulSoup) -> int:
+    def parse_total_results(self, tree: HTMLParser) -> int:
         """Extract total results count from the 'Намерени резултати' span."""
-        mark = soup.find(
-            "span",
-            class_=C.RESULTS_SPAN_CLASS,
-            string=C.RESULTS_TEXT_RE,
-        )
-        if mark:
-            match = C.RESULTS_NUMBER_RE.search(mark.get_text())
-            if match:
-                return int(match.group(1))
+        for node in tree.css(f"span.{C.RESULTS_SPAN_CLASS}"):
+            text = node.text()
+            if C.RESULTS_TEXT_RE.search(text):
+                match = C.RESULTS_NUMBER_RE.search(text)
+                if match:
+                    return int(match.group(1))
         return 0
 
-    def parse_total_pages(self, soup: BeautifulSoup) -> int:
+    def parse_total_pages(self, tree: HTMLParser) -> int:
         """Count total pages from the page-selector dropdown."""
-        select = soup.find("select", id=C.SELECT_PAGE_ID)
-        if select:
-            return len(select.find_all("option"))
+        select = tree.css_first(f'select[id="{C.SELECT_PAGE_ID}"]')
+        if select is not None:
+            return len(select.css("option"))
         return 0
 
     @staticmethod
-    def _parse_row(row: Tag) -> IssueEntry | None:
-        """Parse a single <tr> row and return a IssueEntry or None."""
-        td = row.find("td")
-        if not td:
+    def _parse_row(row: Node) -> IssueEntry | None:
+        """Parse a single <tr> row and return an IssueEntry or None."""
+        td = row.css_first("td")
+        if td is None:
             return None
-
-        text = td.get_text(" ", strip=True)
+        text = td.text(separator=" ", strip=True)
         match = C.ISSUE_RE.search(text)
         if not match:
             return None
-
         number = int(match.group(1))
-        date_str: str = match.group(2)
+        datestr: str = match.group(2)
         extra_type: str = match.group(3) or ""
-        year = int(date_str.rsplit(".", 1)[-1])
-
+        year = int(datestr.rsplit(".", 1)[-1])
         id_obj = IssueParser._extract_id_obj(td)
         download_link_id = IssueParser._extract_download_link_id(td)
-
         return IssueEntry(
             number=number,
-            date=date_str,
+            date=datestr,
             year=year,
             id_obj=id_obj,
             extra_type=extra_type,
@@ -115,27 +100,26 @@ class IssueParser:
         )
 
     @staticmethod
-    def _extract_id_obj(td: Tag) -> str:
-        """Extract the idObj parameter from the 'Съдържание' link onclick."""
-        link = td.find("a", id=re.compile(C.LINK_CONTENT_ID_SUFFIX + "$"))
-        if not link:
+    def _extract_id_obj(td: Node) -> str:
+        """Extract the idObj parameter from the content link onclick."""
+        link = td.css_first(f'a[id$="{C.LINK_CONTENT_ID_SUFFIX}"]')
+        if link is None:
             return ""
-        onclick: str = link.get("onclick", "")
+        onclick = link.attributes.get("onclick", "") or ""
         params = dict(C.ONCLICK_PARAM_RE.findall(onclick))
         return params.get("idObj", "")
 
     @staticmethod
-    def _extract_download_link_id(td: Tag) -> str:
+    def _extract_download_link_id(td: Node) -> str:
         """Extract the HTML element id of the download trigger link."""
-        dl_link = td.find("a", id=re.compile(C.LINK_DOWNLOAD_ID_SUFFIX + "$"))
-        if not dl_link:
+        dl_link = td.css_first(f'a[id$="{C.LINK_DOWNLOAD_ID_SUFFIX}"]')
+        if dl_link is None:
             return ""
-        element_id = dl_link.get("id", "")
-        return element_id if isinstance(element_id, str) else ""
+        return dl_link.attributes.get("id", "") or ""
 
     @staticmethod
     def _normalise_url(raw_url: str) -> str:
         """Ensure a URL is absolute."""
         if raw_url.startswith("http"):
             return raw_url
-        return C.BASE_HOST + raw_url.lstrip("./")
+        return C.BASE_HOST + raw_url.lstrip("/")

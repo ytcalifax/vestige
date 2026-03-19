@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 import requests
-from bs4 import BeautifulSoup
+from selectolax.parser import HTMLParser
 
 from ..core import constants as C
 from ..scraping.parsers import _extract_view_state
@@ -30,19 +30,19 @@ class RequestsTransport:
         self._view_state: str = ""
         self._initialised: bool = False
 
-    def fetch_page(self, page: int) -> BeautifulSoup:
+    def fetch_page(self, page: int) -> HTMLParser:
         """Fetch a listing page by 1-based page number."""
         if not self._initialised:
             self._init_session()
         return self._post_page(page)
 
-    def fetch_download(self, id_obj: str, idcl: str) -> BeautifulSoup:
+    def fetch_download(self, id_obj: str, idcl: str) -> HTMLParser:
         """Fetch the download modal for a given issue id."""
         return self._post_download(id_obj=id_obj, idcl=idcl)
 
     def fetch_download_with_state(
         self, id_obj: str, idcl: str, view_state: str
-    ) -> BeautifulSoup:
+    ) -> HTMLParser:
         """Thread-safe download fetch using a pre-captured ViewState.
 
         Bypasses ``_post()`` so it never reads or writes
@@ -52,7 +52,7 @@ class RequestsTransport:
         data = self._build_download_data(id_obj=id_obj, idcl=idcl, view_state=view_state)
         response = self._session.post(C.BASE_URL, data=data)
         response.raise_for_status()
-        return BeautifulSoup(response.content, "lxml")
+        return HTMLParser(response.content)
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -62,11 +62,11 @@ class RequestsTransport:
         """GET the listing page to obtain cookies and the initial ViewState."""
         response = self._session.get(C.BASE_URL)
         response.raise_for_status()
-        soup = BeautifulSoup(response.content, "lxml")
-        self._view_state = _extract_view_state(soup)
+        tree = HTMLParser(response.content)
+        self._view_state = _extract_view_state(tree)
         self._initialised = True
 
-    def _post_page(self, page: int) -> BeautifulSoup:
+    def _post_page(self, page: int) -> HTMLParser:
         """POST the navigation form to retrieve a specific page."""
         page_str = str(page)
         data = {
@@ -92,7 +92,7 @@ class RequestsTransport:
         }
         return self._post(data)
 
-    def _post_download(self, id_obj: str, idcl: str) -> BeautifulSoup:
+    def _post_download(self, id_obj: str, idcl: str) -> HTMLParser:
         """POST the form to trigger the download modal for a given issue."""
         data = self._build_download_data(
             id_obj=id_obj, idcl=idcl, view_state=self._view_state
@@ -123,10 +123,10 @@ class RequestsTransport:
             C.FIELD_VIEW_STATE: view_state,
         }
 
-    def _post(self, data: dict) -> BeautifulSoup:
+    def _post(self, data: dict) -> HTMLParser:
         """Execute a POST request, update ViewState, and return parsed HTML."""
         response = self._session.post(C.BASE_URL, data=data)
         response.raise_for_status()
-        soup = BeautifulSoup(response.content, "lxml")
-        self._view_state = _extract_view_state(soup)
-        return soup
+        tree = HTMLParser(response.content)
+        self._view_state = _extract_view_state(tree)
+        return tree
