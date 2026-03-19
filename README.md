@@ -10,7 +10,7 @@ Vestige gives you a clean, dependency-light Python interface to the official [Д
 - **📥 Download Links**: Automatically resolve the PDF and RTF download URLs for each issue.
 - **🔌 Pluggable Architecture**: Swap out the HTTP transport or the HTML parser via simple interfaces — great for testing with mocks.
 - **🗂️ Typed Models**: Clean dataclasses (`IssueEntry`, `DownloadFile`, `PageResult`) with `to_dict()` helpers for easy JSON serialisation.
-- **⚡ Minimal Dependencies**: Only needs `selectolax`, `asyncio` and `httpx[http2]`.
+- **⚡ Minimal Dependencies**: Only needs `selectolax` and `httpx[http2]`.
 
 ## 📥 Installation
 
@@ -27,30 +27,45 @@ pip install .
 ## 🚀 Quick Start
 
 ```python
+import asyncio
 from vestige import DVClient
 
-client = DVClient()
+async def main():
+    client = DVClient()
+    try:
+        # Fetch the first page of issues (with download URLs resolved)
+        page = await client.get_page(1)
 
-# Fetch the first page of issues (with download URLs resolved)
-page = client.get_page(1)
+        print(page)
+        # PageResult(page=1, total_results=..., total_pages=..., entries=...)
 
-print(page)
-# PageResult(page=1, total_results=..., total_pages=..., entries=...)
+        for entry in page.entries:
+            print(entry)
+            for file in entry.download_urls:
+                print(f"  → {file.filename}: {file.url}")
+    finally:
+        await client.aclose()
 
-for entry in page.entries:
-    print(entry)
-    for file in entry.download_urls:
-        print(f"  → {file.filename}: {file.url}")
+asyncio.run(main())
 ```
 
 ### Fetch all pages at once
 
 ```python
-all_pages = client.get_all_pages(max_pages=5)
+import asyncio
+from vestige import DVClient
 
-for page in all_pages:
-    for entry in page.entries:
-        print(entry.to_dict())
+async def main():
+    client = DVClient()
+    try:
+        all_pages = await client.get_all_pages(max_pages=5)
+        for page in all_pages:
+            for entry in page.entries:
+                print(entry.to_dict())
+    finally:
+        await client.aclose()
+
+asyncio.run(main())
 ```
 
 ### Skip download URL resolution (faster)
@@ -73,7 +88,7 @@ page = client.get_page(1, fetch_downloads=False)
 
 ```python
 from vestige import DVClient
-from vestige.network.transport import RequestsTransport
+from vestige.network.transport import AsyncRequestsTransport
 from vestige.scraping.parsers import IssueParser
 
 client = DVClient(
@@ -82,7 +97,7 @@ client = DVClient(
 )
 ```
 
-Both `transport` and `parser` accept any object that satisfies the `PageFetcher` and `PageParser` interfaces defined in `vestige.core.interfaces`.
+Both `transport` and `parser` accept any object that satisfies the `AsyncPageFetcher` and `PageParser` interfaces defined in `vestige.core.interfaces`.
 
 ## 🐍 Requirements
 
