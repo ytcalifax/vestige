@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional
 
 from .core import constants as C
@@ -15,21 +16,27 @@ class DVClient:
     Parameters
     ----------
     transport:
-        Concrete implementation of ``PageFetcher``.  Defaults to
+        Concrete implementation of ``PageFetcher``. Defaults to
         ``RequestsTransport`` which uses a live ``requests.Session``.
         Pass a stub/mock here in tests.
     parser:
-        Concrete implementation of ``PageParser``.  Defaults to
-        ``IssueParser``.  Pass a stub/mock here in tests.
+        Concrete implementation of ``PageParser``. Defaults to
+        ``IssueParser``. Pass a stub/mock here in tests.
+    max_workers:
+        Maximum number of threads used to fetch download URLs concurrently
+        per page. Cap this conservatively (default 5) to avoid triggering
+        rate-limiting on dv.parliament.bg.
     """
 
     def __init__(
         self,
         transport: Optional[PageFetcher] = None,
         parser: Optional[PageParser] = None,
+        max_workers: int = 5,
     ) -> None:
         self._transport: PageFetcher = transport or RequestsTransport()
         self._parser: PageParser = parser or IssueParser()
+        self._max_workers: int = max_workers
 
     # ------------------------------------------------------------------
     # Public API
@@ -48,8 +55,9 @@ class DVClient:
         page:
             1-based page number.
         fetch_downloads:
-            When ``True`` (default) an additional HTTP request is made
-            per entry to resolve the PDF / RTF download URLs.
+            When ``True`` (default) concurrent HTTP requests are made
+            to resolve the PDF / RTF download URLs for all entries on
+            the page simultaneously.
 
         Returns
         -------
@@ -62,13 +70,20 @@ class DVClient:
         total_pages = self._parser.parse_total_pages(soup)
 
         if fetch_downloads:
-            for entry in entries:
-                if entry.id_obj and entry._download_link_id:
-                    dl_soup = self._transport.fetch_download(
-                        entry.id_obj,
-                        entry._download_link_id,
-                    )
-                    entry.download_urls = self._parser.parse_download_files(dl_soup)
+            eligible = [e for e in entries if e.id_obj and e._download_link_id]
+            view_state = self._transport._view_state
+
+            def _fetch_dl(entry) -> None:
+                dl_soup = self._transport.fetch_download_with_state(
+                    entry.id_obj, entry._download_link_id, view_state
+                )
+                entry.download_urls = self._parser.parse_download_files(dl_soup)
+
+            workers = min(self._max_workers, len(eligible)) if eligible else 1
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = {pool.submit(_fetch_dl, e): e for e in eligible}
+                for f in as_completed(futures):
+                    f.result()  # re-raises any exception from the thread
 
         return PageResult(
             page=page,

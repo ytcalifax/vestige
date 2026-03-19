@@ -23,6 +23,15 @@ class PageFetcher(Protocol):
         """Fetch the download modal for a given issue and return its parsed HTML."""
         ...  # pragma: no cover
 
+    def fetch_download_with_state(
+        self, id_obj: str, idcl: str, view_state: str
+    ) -> BeautifulSoup:
+        """Thread-safe download fetch using an explicit ViewState snapshot.
+
+        Does not read or mutate ``self._view_state``.
+        """
+        ...  # pragma: no cover
+
 
 @runtime_checkable
 class PageParser(Protocol):

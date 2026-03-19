@@ -17,8 +17,11 @@ class RequestsTransport:
     Parameters
     ----------
     session:
-        Optional pre-configured ``requests.Session``.  If omitted a new
+        Optional pre-configured ``requests.Session``. If omitted a new
         session is created and the default headers are applied.
+        urllib3's connection pool is thread-safe; concurrent download
+        fetches via ``fetch_download_with_state`` are safe as long as
+        no thread mutates session-level headers or cookies mid-flight.
     """
 
     def __init__(self, session: Optional[requests.Session] = None) -> None:
@@ -26,7 +29,6 @@ class RequestsTransport:
         self._session.headers.update(C.DEFAULT_HEADERS)
         self._view_state: str = ""
         self._initialised: bool = False
-
 
     def fetch_page(self, page: int) -> BeautifulSoup:
         """Fetch a listing page by 1-based page number."""
@@ -38,11 +40,29 @@ class RequestsTransport:
         """Fetch the download modal for a given issue id."""
         return self._post_download(id_obj=id_obj, idcl=idcl)
 
+    def fetch_download_with_state(
+        self, id_obj: str, idcl: str, view_state: str
+    ) -> BeautifulSoup:
+        """Thread-safe download fetch using a pre-captured ViewState.
+
+        Bypasses ``_post()`` so it never reads or writes
+        ``self._view_state``, making concurrent calls from a
+        ``ThreadPoolExecutor`` safe.
+        """
+        data = self._build_download_data(id_obj=id_obj, idcl=idcl, view_state=view_state)
+        response = self._session.post(C.BASE_URL, data=data)
+        response.raise_for_status()
+        return BeautifulSoup(response.content, "lxml")
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
     def _init_session(self) -> None:
         """GET the listing page to obtain cookies and the initial ViewState."""
         response = self._session.get(C.BASE_URL)
         response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
+        soup = BeautifulSoup(response.content, "lxml")
         self._view_state = _extract_view_state(soup)
         self._initialised = True
 
@@ -74,7 +94,14 @@ class RequestsTransport:
 
     def _post_download(self, id_obj: str, idcl: str) -> BeautifulSoup:
         """POST the form to trigger the download modal for a given issue."""
-        data = {
+        data = self._build_download_data(
+            id_obj=id_obj, idcl=idcl, view_state=self._view_state
+        )
+        return self._post(data)
+
+    def _build_download_data(self, id_obj: str, idcl: str, view_state: str) -> dict:
+        """Construct the POST body for a download modal request."""
+        return {
             C.FIELD_ACTIVE_TAB: C.VALUE_ACTIVE_TAB,
             C.FIELD_NOT_FIRST: C.VALUE_NOT_FIRST,
             C.FIELD_JSP61: "",
@@ -93,15 +120,13 @@ class RequestsTransport:
             C.FIELD_ID_OBJ: "",
             C.FIELD_RAZDEL: "",
             C.FIELD_BROI: "",
-            C.FIELD_VIEW_STATE: self._view_state,
+            C.FIELD_VIEW_STATE: view_state,
         }
-        return self._post(data)
 
     def _post(self, data: dict) -> BeautifulSoup:
         """Execute a POST request, update ViewState, and return parsed HTML."""
         response = self._session.post(C.BASE_URL, data=data)
         response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
+        soup = BeautifulSoup(response.content, "lxml")
         self._view_state = _extract_view_state(soup)
         return soup
-
