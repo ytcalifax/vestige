@@ -1,72 +1,69 @@
 from __future__ import annotations
 
-from typing import Optional
-
-import requests
+import httpx
 from selectolax.parser import HTMLParser
 
 from ..core import constants as C
 from ..scraping.parsers import _extract_view_state
 
 
-class RequestsTransport:
-    """Concrete HTTP transport backed by ``requests``.
+class AsyncRequestsTransport:
+    """Async HTTP transport backed by ``httpx``.
 
-    Satisfies the ``PageFetcher`` protocol.
+    Satisfies the ``AsyncPageFetcher`` protocol.
 
-    Parameters
-    ----------
-    session:
-        Optional pre-configured ``requests.Session``. If omitted a new
-        session is created and the default headers are applied.
-        urllib3's connection pool is thread-safe; concurrent download
-        fetches via ``fetch_download_with_state`` are safe as long as
-        no thread mutates session-level headers or cookies mid-flight.
+    Uses a single ``httpx.AsyncClient`` for the lifetime of the object.
+    HTTP/2 is requested; if the server does not support it httpx falls
+    back to HTTP/1.1 transparently.
+
+    Call ``await transport.aclose()`` when done to release connections.
     """
 
-    def __init__(self, session: Optional[requests.Session] = None) -> None:
-        self._session: requests.Session = session or requests.Session()
-        self._session.headers.update(C.DEFAULT_HEADERS)
+    def __init__(self) -> None:
+        self._client: httpx.AsyncClient = httpx.AsyncClient(
+            headers=C.DEFAULT_HEADERS,
+            http2=True,
+            follow_redirects=True,
+        )
         self._view_state: str = ""
         self._initialised: bool = False
 
-    def fetch_page(self, page: int) -> HTMLParser:
+    async def fetch_page(self, page: int) -> HTMLParser:
         """Fetch a listing page by 1-based page number."""
         if not self._initialised:
-            self._init_session()
-        return self._post_page(page)
+            await self._init_session()
+        return await self._post_page(page)
 
-    def fetch_download(self, id_obj: str, idcl: str) -> HTMLParser:
+    async def fetch_download(self, id_obj: str, idcl: str) -> HTMLParser:
         """Fetch the download modal for a given issue id."""
-        return self._post_download(id_obj=id_obj, idcl=idcl)
+        return await self._post_download(id_obj=id_obj, idcl=idcl)
 
-    def fetch_download_with_state(
+    async def fetch_download_with_state(
         self, id_obj: str, idcl: str, view_state: str
     ) -> HTMLParser:
-        """Thread-safe download fetch using a pre-captured ViewState.
-
-        Bypasses ``_post()`` so it never reads or writes
-        ``self._view_state``, making concurrent calls from a
-        ``ThreadPoolExecutor`` safe.
-        """
+        """Concurrent-safe fetch: uses explicit ViewState, never mutates self._view_state."""
         data = self._build_download_data(id_obj=id_obj, idcl=idcl, view_state=view_state)
-        response = self._session.post(C.BASE_URL, data=data)
+        response = await self._client.post(C.BASE_URL, data=data)
         response.raise_for_status()
         return HTMLParser(response.content)
+
+    async def aclose(self) -> None:
+        """Close the underlying httpx client and release connections."""
+        await self._client.aclose()
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _init_session(self) -> None:
+    async def _init_session(self) -> None:
         """GET the listing page to obtain cookies and the initial ViewState."""
-        response = self._session.get(C.BASE_URL)
+        response = await self._client.get(C.BASE_URL)
         response.raise_for_status()
         tree = HTMLParser(response.content)
         self._view_state = _extract_view_state(tree)
         self._initialised = True
 
-    def _post_page(self, page: int) -> HTMLParser:
+    async def _post_page(self, page: int) -> HTMLParser:
         """POST the navigation form to retrieve a specific page."""
         page_str = str(page)
         data = {
@@ -90,14 +87,14 @@ class RequestsTransport:
             C.FIELD_BROI: "",
             C.FIELD_VIEW_STATE: self._view_state,
         }
-        return self._post(data)
+        return await self._post(data)
 
-    def _post_download(self, id_obj: str, idcl: str) -> HTMLParser:
+    async def _post_download(self, id_obj: str, idcl: str) -> HTMLParser:
         """POST the form to trigger the download modal for a given issue."""
         data = self._build_download_data(
             id_obj=id_obj, idcl=idcl, view_state=self._view_state
         )
-        return self._post(data)
+        return await self._post(data)
 
     def _build_download_data(self, id_obj: str, idcl: str, view_state: str) -> dict:
         """Construct the POST body for a download modal request."""
@@ -123,9 +120,9 @@ class RequestsTransport:
             C.FIELD_VIEW_STATE: view_state,
         }
 
-    def _post(self, data: dict) -> HTMLParser:
-        """Execute a POST request, update ViewState, and return parsed HTML."""
-        response = self._session.post(C.BASE_URL, data=data)
+    async def _post(self, data: dict) -> HTMLParser:
+        """Execute a POST, update ViewState, and return parsed HTML."""
+        response = await self._client.post(C.BASE_URL, data=data)
         response.raise_for_status()
         tree = HTMLParser(response.content)
         self._view_state = _extract_view_state(tree)
