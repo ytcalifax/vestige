@@ -9,7 +9,7 @@ Vestige gives you a clean, dependency-light Python interface to the official [Д
 - **📄 Issue Listings**: Fetch paginated lists of State Gazette issues, including issue number, date, year, and type.
 - **📥 Download Links**: Automatically resolve the PDF and RTF download URLs for each issue.
 - **🔌 Pluggable Architecture**: Swap out the HTTP transport or the HTML parser via simple interfaces — great for testing with mocks.
-- **🗂️ Typed Models**: Clean dataclasses (`IssueEntry`, `DownloadFile`, `PageResult`) with `to_dict()` helpers for easy JSON serialisation.
+- **🗂️ Typed Models**: Clean dataclasses (`IssueEntry`, `DownloadFile`, `PageResult`) with `to_dict()` helpers for easy JSON serialization.
 - **⚡ Minimal Dependencies**: Only needs `selectolax` and `httpx[http2]`.
 
 ## 📥 Installation
@@ -76,11 +76,11 @@ page = client.get_page(1, fetch_downloads=False)
 
 ## 🗂️ Models
 
-| Class | Description |
-|-------|-------------|
-| `IssueEntry` | One issue of the State Gazette — number, date, year, type, and download files. |
-| `DownloadFile` | A single downloadable file (`url`, `filename`). |
-| `PageResult` | One page of results — holds metadata and a list of `IssueEntry` objects. |
+| Class          | Description                                                                    |
+|----------------|--------------------------------------------------------------------------------|
+| `IssueEntry`   | One issue of the State Gazette — number, date, year, type, and download files. |
+| `DownloadFile` | A single downloadable file (`url`, `filename`).                                |
+| `PageResult`   | One page of results — holds metadata and a list of `IssueEntry` objects.       |
 
 ## ⚙️ Advanced Usage
 
