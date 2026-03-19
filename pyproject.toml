@@ -26,7 +26,7 @@ classifiers = [
     "Topic :: Utilities",
 ]
 keywords = ["bulgaria", "gazette", "state", "state-gazette", "dv", "darzhaven-vestnik"]
-dependencies = ["requests>=2.31", "selectolax>=0.4.7"]
+dependencies = ["asyncio>=4.0.0", "httpx[http2]>=0.28.1", "selectolax>=0.4.7"]
 
 [project.urls]
 Homepage = "https://github.com/ytcalifax/vestige"

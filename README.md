@@ -10,7 +10,7 @@ Vestige gives you a clean, dependency-light Python interface to the official [Д
 - **📥 Download Links**: Automatically resolve the PDF and RTF download URLs for each issue.
 - **🔌 Pluggable Architecture**: Swap out the HTTP transport or the HTML parser via simple interfaces — great for testing with mocks.
 - **🗂️ Typed Models**: Clean dataclasses (`IssueEntry`, `DownloadFile`, `PageResult`) with `to_dict()` helpers for easy JSON serialisation.
-- **⚡ Minimal Dependencies**: Only needs `requests` and `beautifulsoup4`.
+- **⚡ Minimal Dependencies**: Only needs `selectolax`, `asyncio` and `httpx[http2]`.
 
 ## 📥 Installation
 
@@ -87,8 +87,9 @@ Both `transport` and `parser` accept any object that satisfies the `PageFetcher`
 ## 🐍 Requirements
 
 - Python **3.10+**
-- `requests >= 2.31`
-- `beautifulsoup4 >= 4.12`
+- `asyncio>=4.0.0`
+- `selectolax>=0.4.7`
+- `httpx[http2]>=0.28.1`
 
 ## 🤝 Contributing
 

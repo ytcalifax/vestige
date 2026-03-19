@@ -1,2 +1,3 @@
-requests>=2.31
+asyncio>=4.0.0
 selectolax>=0.4.7
+httpx[http2]>=0.28.1
