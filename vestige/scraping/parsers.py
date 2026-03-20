@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import re
-from typing import List
+from typing import List, Optional
 
 from selectolax.parser import HTMLParser, Node
 
 from ..core import constants as C
 from ..models.models import DownloadFile, IssueEntry
-
 
 def _extract_view_state(tree: HTMLParser) -> str:
     """Pull the javax.faces.ViewState hidden input value from a page.
@@ -42,19 +41,34 @@ class IssueParser:
                 entries.append(entry)
         return entries
 
-    def parse_download_files(self, tree: HTMLParser) -> List[DownloadFile]:
-        """Parse download file links from the download modal panel."""
+    def parse_download_files(self, tree: Optional[HTMLParser], direct_url: Optional[str] = None) -> List[DownloadFile]:
+        """Parse download file links from the modal panel or process direct link."""
+
+        # Scenario 1: Intercepted a 302 Redirect to a direct download
+        if direct_url:
+            url = self._normalise_url(direct_url)
+            match = re.search(r"idFileAtt=(\d+)", direct_url)
+            file_id = match.group(1) if match else "direct"
+
+            return [DownloadFile(url=url, filename=f"Issue_Document_{file_id}.pdf")]
+
+        # Scenario 2: Processing the modal popup HTML tree
         files: List[DownloadFile] = []
+        if tree is None:
+            return files
+
         tbody = tree.css_first(
             'tbody[id^="broi_form:_idJsp"][id$=":tbody_element"]'
         )
         if tbody is None:
             return files
+
         for a_tag in tbody.css('a[href*="fileUploadShowing"]'):
             href = a_tag.attributes.get("href", "") or ""
             url = self._normalise_url(href)
             filename = a_tag.text(strip=True)
             files.append(DownloadFile(url=url, filename=filename))
+
         return files
 
     def parse_total_results(self, tree: HTMLParser) -> int:

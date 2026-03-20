@@ -66,10 +66,10 @@ class DVClient:
             view_state = self._transport._view_state
 
             async def _fetch_dl(entry) -> None:
-                dl_tree = await self._transport.fetch_download_with_state(
+                tree_resp, direct_url = await self._transport.fetch_download_with_state(
                     entry._id_obj, entry._download_link_id, view_state
                 )
-                entry.urls = self._parser.parse_download_files(dl_tree)
+                entry.urls = self._parser.parse_download_files(tree_resp, direct_url)
 
             await asyncio.gather(*[_fetch_dl(e) for e in eligible])
 

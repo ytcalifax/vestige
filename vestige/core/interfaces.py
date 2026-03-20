@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Protocol, runtime_checkable
+from typing import List, Optional, Protocol, Tuple, runtime_checkable
 
 from selectolax.parser import HTMLParser
 
@@ -15,13 +15,13 @@ class AsyncPageFetcher(Protocol):
         """Fetch a listing page by number and return its parsed HTML."""
         ...  # pragma: no cover
 
-    async def fetch_download(self, id_obj: str, idcl: str) -> HTMLParser:
-        """Fetch the download modal for a given issue and return its parsed HTML."""
+    async def fetch_download(self, id_obj: str, idcl: str) -> Tuple[Optional[HTMLParser], Optional[str]]:
+        """Fetch the download modal or direct download url for a given issue."""
         ...  # pragma: no cover
 
     async def fetch_download_with_state(
         self, id_obj: str, idcl: str, view_state: str
-    ) -> HTMLParser:
+    ) -> Tuple[Optional[HTMLParser], Optional[str]]:
         """Concurrent-safe download fetch using an explicit ViewState snapshot."""
         ...  # pragma: no cover
 
@@ -37,7 +37,7 @@ class PageParser(Protocol):
     def parse_entries(self, tree: HTMLParser) -> List[IssueEntry]:
         ...  # pragma: no cover
 
-    def parse_download_files(self, tree: HTMLParser) -> List[DownloadFile]:
+    def parse_download_files(self, tree: Optional[HTMLParser], direct_url: Optional[str] = None) -> List[DownloadFile]:
         ...  # pragma: no cover
 
     def parse_total_results(self, tree: HTMLParser) -> int:

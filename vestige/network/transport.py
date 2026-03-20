@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Optional, Tuple
 import httpx
 from selectolax.parser import HTMLParser
 
@@ -34,18 +35,26 @@ class AsyncRequestsTransport:
             await self._init_session()
         return await self._post_page(page)
 
-    async def fetch_download(self, id_obj: str, idcl: str) -> HTMLParser:
-        """Fetch the download modal for a given issue id."""
+    async def fetch_download(self, id_obj: str, idcl: str) -> Tuple[Optional[HTMLParser], Optional[str]]:
+        """Fetch the download modal or redirect URL for a given issue id."""
         return await self._post_download(id_obj=id_obj, idcl=idcl)
 
     async def fetch_download_with_state(
         self, id_obj: str, idcl: str, view_state: str
-    ) -> HTMLParser:
+    ) -> Tuple[Optional[HTMLParser], Optional[str]]:
         """Concurrent-safe fetch: uses explicit ViewState, never mutates self._view_state."""
         data = self._build_download_data(id_obj=id_obj, idcl=idcl, view_state=view_state)
-        response = await self._client.post(C.BASE_URL, data=data)
+
+        # Override follow_redirects=False specifically for the download POST
+        request = self._client.build_request("POST", C.BASE_URL, data=data)
+        response = await self._client.send(request, follow_redirects=False)
+
+        # Intercept single-file direct downloads (302 Redirect)
+        if response.status_code in (301, 302, 303, 307, 308):
+            return None, response.headers.get("Location")
+
         response.raise_for_status()
-        return HTMLParser(response.content)
+        return HTMLParser(response.content), None
 
     async def aclose(self) -> None:
         """Close the underlying httpx client and release connections."""
@@ -89,12 +98,21 @@ class AsyncRequestsTransport:
         }
         return await self._post(data)
 
-    async def _post_download(self, id_obj: str, idcl: str) -> HTMLParser:
+    async def _post_download(self, id_obj: str, idcl: str) -> Tuple[Optional[HTMLParser], Optional[str]]:
         """POST the form to trigger the download modal for a given issue."""
         data = self._build_download_data(
             id_obj=id_obj, idcl=idcl, view_state=self._view_state
         )
-        return await self._post(data)
+        request = self._client.build_request("POST", C.BASE_URL, data=data)
+        response = await self._client.send(request, follow_redirects=False)
+
+        if response.status_code in (301, 302, 303, 307, 308):
+            return None, response.headers.get("Location")
+
+        response.raise_for_status()
+        tree = HTMLParser(response.content)
+        self._view_state = _extract_view_state(tree)
+        return tree, None
 
     def _build_download_data(self, id_obj: str, idcl: str, view_state: str) -> dict:
         """Construct the POST body for a download modal request."""
