@@ -94,8 +94,8 @@ class IssueParser:
             number=number,
             date=datestr,
             year=year,
-            id_obj=id_obj,
-            extra_type=extra_type,
+            type=extra_type,
+            _id_obj=id_obj,
             _download_link_id=download_link_id,
         )
 

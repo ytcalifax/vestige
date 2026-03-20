@@ -62,14 +62,14 @@ class DVClient:
         total_pages = self._parser.parse_total_pages(tree)
 
         if fetch_downloads:
-            eligible = [e for e in entries if e.id_obj and e._download_link_id]
+            eligible = [e for e in entries if e._id_obj and e._download_link_id]
             view_state = self._transport._view_state
 
             async def _fetch_dl(entry) -> None:
                 dl_tree = await self._transport.fetch_download_with_state(
-                    entry.id_obj, entry._download_link_id, view_state
+                    entry._id_obj, entry._download_link_id, view_state
                 )
-                entry.download_urls = self._parser.parse_download_files(dl_tree)
+                entry.urls = self._parser.parse_download_files(dl_tree)
 
             await asyncio.gather(*[_fetch_dl(e) for e in eligible])
 

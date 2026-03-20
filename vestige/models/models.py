@@ -29,12 +29,13 @@ class IssueEntry:
     number: int
     date: str
     year: int
-    id_obj: str
     type: str = ""
-
-    # Internal transport detail — not part of the public API.
-    _download_link_id: str = field(default="", repr=False)
     urls: List[DownloadFile] = field(default_factory=list)
+
+    # Internal transport details — not part of the public API.
+    _id_obj: str = field(default="", repr=False)
+    _download_link_id: str = field(default="", repr=False)
+
 
     def __post_init__(self):
         object.__setattr__(self, 'type', self._normalize_type(self.type))
@@ -60,7 +61,6 @@ class IssueEntry:
             "number": self.number,
             "date": self.date,
             "year": self.year,
-            "id_obj": self.id_obj,
             "type": self.type,
             "urls": [
                 {"url": f.url, "filename": f.filename}
