@@ -37,7 +37,13 @@ class PageParser(Protocol):
     def parse_entries(self, tree: HTMLParser) -> List[IssueEntry]:
         ...  # pragma: no cover
 
-    def parse_download_files(self, tree: Optional[HTMLParser], direct_url: Optional[str] = None) -> List[DownloadFile]:
+    def parse_download_files(
+        self,
+        tree: Optional[HTMLParser],
+        direct_url: Optional[str] = None,
+        issue: Optional[int] = None,
+        year: Optional[int] = None,
+    ) -> List[DownloadFile]:
         ...  # pragma: no cover
 
     def parse_total_results(self, tree: HTMLParser) -> int:

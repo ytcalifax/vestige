@@ -41,12 +41,32 @@ class IssueParser:
                 entries.append(entry)
         return entries
 
-    def parse_download_files(self, tree: Optional[HTMLParser], direct_url: Optional[str] = None) -> List[DownloadFile]:
-        """Parse download file links from the modal panel or process direct link."""
+    def parse_download_files(
+        self,
+        tree: Optional[HTMLParser],
+        direct_url: Optional[str] = None,
+        issue: Optional[int] = None,
+        year: Optional[int] = None,
+    ) -> List[DownloadFile]:
+        """Parse download file links from the modal panel or process direct link.
+
+        When a direct URL is provided (redirect to file) and both `issue` and
+        `year` are supplied, build the filename as "{issue}_{YYYY}.pdf" where
+        YYYY is the full four-digit year. If the scraped `year` appears to be
+        two-digit (e.g. 26) it is interpreted as 2000+ (-> 2026) for filename
+        construction. If issue/year are missing we fallback to the previous
+        behaviour and use the file id when available.
+        """
 
         # Scenario 1: Intercepted a 302 Redirect to a direct download
         if direct_url:
             url = self._normalise_url(direct_url)
+            if issue is not None and year is not None:
+                # Ensure a four-digit year for the filename. If the scraped
+                # year is two-digit (e.g. 26) assume 2000s (-> 2026).
+                year_full = year if year >= 100 else 2000 + year
+                year_str = str(year_full).zfill(4)
+                return [DownloadFile(url=url, filename=f"{issue}_{year_str}.pdf")]
             match = re.search(r"idFileAtt=(\d+)", direct_url)
             file_id = match.group(1) if match else "direct"
 
