@@ -22,7 +22,7 @@ class DownloadFile:
 class IssueEntry:
     """One issue of the State Gazette.
 
-    Mutable so that ``download_urls`` can be populated lazily after the
+    Mutable so that ``urls`` can be populated lazily after the
     entry is first parsed from the listing page.
     """
 
@@ -30,15 +30,25 @@ class IssueEntry:
     date: str
     year: int
     id_obj: str
-    extra_type: str = ""
+    type: str = ""
 
     # Internal transport detail — not part of the public API.
     _download_link_id: str = field(default="", repr=False)
-    download_urls: List[DownloadFile] = field(default_factory=list)
+    urls: List[DownloadFile] = field(default_factory=list)
+
+    def __post_init__(self):
+        object.__setattr__(self, 'type', self._normalize_type(self.type))
+
+    @staticmethod
+    def _normalize_type(value: str) -> str:
+        if value == "извънреден":
+            return "special"
+        else:
+            return "regular"
 
     def __repr__(self) -> str:
-        extra = f", type={self.extra_type!r}" if self.extra_type else ""
-        dl = f", files={len(self.download_urls)}" if self.download_urls else ""
+        extra = f", type={self.type!r}" if self.type else ""
+        dl = f", files={len(self.urls)}" if self.urls else ""
         return (
             f"IssueEntry(number={self.number}, date={self.date!r}, "
             f"year={self.year}{extra}{dl})"
@@ -51,10 +61,10 @@ class IssueEntry:
             "date": self.date,
             "year": self.year,
             "id_obj": self.id_obj,
-            "extra_type": self.extra_type,
-            "download_urls": [
+            "type": self.type,
+            "urls": [
                 {"url": f.url, "filename": f.filename}
-                for f in self.download_urls
+                for f in self.urls
             ],
         }
 
