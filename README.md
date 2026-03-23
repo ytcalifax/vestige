@@ -41,7 +41,7 @@ async def main():
 
         for entry in page.entries:
             print(entry)
-            for file in entry.download_urls:
+            for file in entry.urls:
                 print(f"  → {file.filename}: {file.url}")
     finally:
         await client.aclose()
